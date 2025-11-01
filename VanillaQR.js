@@ -1,58 +1,46 @@
-//https://github.com/chuckfairy/VanillaQR.js
-//VanillaQR Function constructor
-//pass an object with customizable options
-//url, colorLight, colorDark, width, height
+
+	/**
+	 * VanillaQR.js
+	 * (c) Chuck Fairy
+	 * https://github.com/chuckfairy/VanillaQR.js
+	 */
+
 function VanillaQR ( customize ) {
 
     var scope = this;
 
-    customize = typeof(customize) === "object" ? customize : {};
+    customize = customize || {};
 
     /********************PUBLICS********************/
 
     scope.revision = 3;
 
-    //canvas output types
-    scope.imageTypes = {
-        "bmp"    : "image/bmp",
-        "gif"    : "image/gif",
-        "jpeg"   : "image/jpeg",
-        "jpg"    : "image/jpg",
-        "png"    : "image/png",
-        "svg+xml": "image/svg+xml",
-        "tiff"   : "image/tiff",
-        "webp"   : "image/webp",
-        "x-icon" : "image/x-icon"
-    };
-
-    //toTable use will default if no canvas support
-    scope.toTable = customize.toTable;
-
-    //qr active domElement
-    scope.domElement = (scope.toTable) ?
-        document.createElement("div"):
-        document.createElement("canvas");
+    scope.domElement = document.createElement('canvas');
+    scope.qrc = scope.domElement.getContext('2d');
+	scope.domElement.style.verticalAlign = 'top';
+	scope.domElement.style.width = '100%';
 
     //QR url
     scope.url = customize.url || "";
 
     //Canvas and qr width and height
-    scope.size  = (customize.size  || 280);
-
-    //QR context
-    scope.qrc = false;
+    scope.size = customize.size || 280;
 
     //QR colors
-    scope.colorLight = customize.colorLight || '#fff';
+    scope.colorLight = customize.colorLight;
     scope.colorDark = customize.colorDark || "#000";
 
-    //Correction level
+    //Correction level (1-4)
     scope.ecclevel = customize.ecclevel || 1;
 
     //Border related
-    scope.noBorder = customize.noBorder;
-    scope.borderSize = customize.borderSize || 4;
+    scope.borderSize = customize.borderSize || 0;
 
+	//Rounded
+	scope.rounded = customize.rounded;
+
+	//Image
+	scope.loadImage(customize.image);
 
     /********************PRIVATES********************/
 
@@ -114,7 +102,7 @@ function VanillaQR ( customize ) {
             setmask(x - j, y - 1);
             setmask(x + j, y + 1);
         }
-    }
+    };
 
     //Bit shift modnn
     var modnn = function(x) {
@@ -257,48 +245,48 @@ function VanillaQR ( customize ) {
 
     };
 
-    // Using the table of the length of each run, calculate the amount of bad image
-    // - long runs or those that look like finders; called twice, once each for X and Y
-    var badruns = function(length) {
+	// Using the table of the length of each run, calculate the amount of bad image
+	// - long runs or those that look like finders; called twice, once each for X and Y
+	var badruns = function(length)
+	{
+		let runsbad = 0, i;
+		for (i = 0; i <= length; i++)
+			if (rlens[i] >= 5)
+				runsbad += VanillaQR.N1 + rlens[i] - 5;
+		// BwBBBwB as in finder
+		for (i = 3; i < length - 1; i += 2)
+			if (
+				rlens[i - 2] == rlens[i + 2] &&
+				rlens[i + 2] == rlens[i - 1] &&
+				rlens[i - 1] == rlens[i + 1] &&
+				rlens[i - 1] * 3 == rlens[i] &&
+				(
+					rlens[i - 3] == 0 || // beginning
+					i + 3 > length    || // end
+					rlens[i - 3] * 3 >= rlens[i] * 4 || rlens[i + 3] * 3 >= rlens[i] * 4
+				)
+			)
+			runsbad += VanillaQR.N3;
+		return runsbad;
+	};
 
-        var i;
-        var runsbad = 0;
-        for (i = 0; i <= length; i++)
-            if (rlens[i] >= 5)
-                runsbad += VanillaQR.N1 + rlens[i] - 5;
-        // BwBBBwB as in finder
-        for (i = 3; i < length - 1; i += 2)
-            if (rlens[i - 2] == rlens[i + 2]
-                && rlens[i + 2] == rlens[i - 1]
-                && rlens[i - 1] == rlens[i + 1]
-                && rlens[i - 1] * 3 == rlens[i]
-                // white around the black pattern? Not part of spec
-                && (rlens[i - 3] == 0 // beginning
-                    || i + 3 > length  // end
-                    || rlens[i - 3] * 3 >= rlens[i] * 4 || rlens[i + 3] * 3 >= rlens[i] * 4)
-               )
-                runsbad += VanillaQR.N3;
-        return runsbad;
+	// Calculate how bad the masked image is - blocks, imbalance, runs, or finders.
+	var badcheck = function()
+	{
+		var x, y, h, b, b1;
+		var thisbad = 0;
+		var bw = 0;
 
-    };
-
-    // Calculate how bad the masked image is - blocks, imbalance, runs, or finders.
-    var badcheck = function() {
-
-        var x, y, h, b, b1;
-        var thisbad = 0;
-        var bw = 0;
-
-        // blocks of same color.
-        for (y = 0; y < width - 1; y++) {
-            for (x = 0; x < width - 1; x++) {
-                if ((qrframe[x + width * y] && qrframe[(x + 1) + width * y]
-                     && qrframe[x + width * (y + 1)] && qrframe[(x + 1) + width * (y + 1)]) // all black
-                    || !(qrframe[x + width * y] || qrframe[(x + 1) + width * y]
-                         || qrframe[x + width * (y + 1)] || qrframe[(x + 1) + width * (y + 1)])) // all white
-                    thisbad += VanillaQR.N2;
-            }
-        }
+		// blocks of same color.
+		for (y = 0; y < width - 1; y++) {
+			for (x = 0; x < width - 1; x++) {
+				if (
+					 (qrframe[x + width * y] && qrframe[(x + 1) + width * y] && qrframe[x + width * (y + 1)] && qrframe[(x + 1) + width * (y + 1)]) || // all black
+					!(qrframe[x + width * y] || qrframe[(x + 1) + width * y] || qrframe[x + width * (y + 1)] || qrframe[(x + 1) + width * (y + 1)])    // all white
+				)
+				thisbad += VanillaQR.N2;
+			}
+		}
 
         // X runs
         for (y = 0; y < width; y++) {
@@ -324,8 +312,8 @@ function VanillaQR ( customize ) {
         var count = 0;
         big += big << 2;
         big <<= 1;
-        while (big > width * width)
-            big -= width * width, count++;
+        while (big > width * width) {
+            big -= width * width; count++;}
         thisbad += count * VanillaQR.N4;
 
         // Y runs
@@ -548,16 +536,17 @@ function VanillaQR ( customize ) {
     // calculate generator polynomial
 
 
-        genpoly[0] = 1;
-        for (i = 0; i < eccblkwid; i++) {
-            genpoly[i + 1] = 1;
-            for (j = i; j > 0; j--)
-                genpoly[j] = genpoly[j]
-                ? genpoly[j - 1] ^ gexp[modnn(glog[genpoly[j]] + i)] : genpoly[j - 1];
-            genpoly[0] = gexp[modnn(glog[genpoly[0]] + i)];
-        }
-        for (i = 0; i <= eccblkwid; i++)
-            genpoly[i] = glog[genpoly[i]]; // use logs for genpoly[] to save calc step
+		genpoly[0] = 1;
+		for (i = 0; i < eccblkwid; i++) {
+			genpoly[i + 1] = 1;
+			for (j = i; j > 0; j--)
+				genpoly[j] = genpoly[j] ?
+					genpoly[j - 1] ^ gexp[modnn(glog[genpoly[j]] + i)] :
+					genpoly[j - 1];
+			genpoly[0] = gexp[modnn(glog[genpoly[0]] + i)];
+		}
+		for (i = 0; i <= eccblkwid; i++)
+			genpoly[i] = glog[genpoly[i]]; // use logs for genpoly[] to save calc step
 
     // append ecc to data buffer
         k = x;
@@ -688,15 +677,7 @@ function VanillaQR ( customize ) {
         ecclevel = scope.ecclevel;
         var qf = scope.genframe(scope.url);
 
-        if(scope.toTable) {
-
-            scope.tableWrite(qf, width);
-
-        } else {
-
-            scope.canvasWrite(qf, width);
-
-        }
+		scope.canvasWrite(qf, width);
 
     };
 
@@ -708,211 +689,104 @@ function VanillaQR ( customize ) {
 //Get canvas 2D Context
 VanillaQR.prototype = {
 
+	loadImage : function(src)
+	{
+		var scope = this;
+		if (src) {
+
+			scope.image = new Image();
+			scope.image.onload = () => scope.init();
+			scope.image.src = src;
+
+		} else if (scope.image) {
+
+			scope.image = null;
+			scope.init();
+
+		}
+	},
+
     //Canvas create
     canvasWrite: function(qf, width) {
 
         var scope = this;
 
-        //Get context and proceed if it is allowed
-        if(!scope.qrc) {
-
-            scope.qrc = scope.getContext(scope.domElement);
-
-            //No canvas support default to Table
-            if(!scope.qrc) {
-                scope.toTable = true;
-                scope.domElement = document.createElement("div");
-                scope.tableWrite(qf, width);
-                return;
-            }
-
-        }
-
         //Setup canvas context
         var size = scope.size;
         var qrc = scope.qrc;
+		var rndd = scope.rounded && qrc.roundRect && true;
+        var px = Math.round(size / width);
+        var offset = scope.borderSize;
 
-        qrc.lineWidth=1;
-
-        var px = size;
-        px /= width + 10;
-        px=Math.round(px - 0.5);
-
-        var offset = 4;
-
-        if (scope.noBorder) {
-            qrc.canvas.width = qrc.canvas.height = px * width;
-            offset = 0;
-        }
-        else {
-            qrc.canvas.width = qrc.canvas.height = size;
-        }
+        qrc.lineWidth = 1;
+        qrc.canvas.width = qrc.canvas.height = px * (width + offset * 2);
 
         //Fill canvas with set colors
         qrc.clearRect( 0, 0, size, size );
-        qrc.fillStyle = scope.colorLight;
-        qrc.fillRect(0, 0, px*(width+8), px*(width+8));
+		if (scope.colorLight) {
+			qrc.fillStyle = scope.colorLight;
+			qrc.fillRect(0, 0, px*(width+8), px*(width+8));
+		}
         qrc.fillStyle = scope.colorDark;
+
+		if (this.image) {
+
+			let i, j, k, l;
+
+			k  =  Math.ceil(width * 0.25);
+			k += (width - k) % 2;
+			l  = (width / 2) - (k / 2);
+
+			for(i = 0; i < width; ++i) {
+				for(j = 0; j < width; ++j) {
+					if (i >= l && i < (l + k) && j >= l && j < (l + k))
+						qf[j*width+i] = 0;
+				}
+			}
+			qrc.drawImage(
+
+				this.image,
+				(l + offset + 0.5) * px,
+				(l + offset + 0.5) * px,
+				(k - 1) * px,
+				(k - 1) * px
+
+			);
+		}
 
         //Write boxes per row
         for( var i = 0; i < width; i++ ) {
-
             for( var j = 0; j < width; j++ ) {
                 if( qf[j*width+i] ) {
-                    qrc.fillRect(px*(offset+i),px*(offset+j),px,px);
+					if (rndd) {
+
+						let grid = [
+							i && qf[j*width+(i - 1)],
+							j && qf[(j - 1)*width+i],
+							i < (width - 1) && qf[j*width+(i + 1)],
+							j < (width - 1) && qf[(j + 1)*width+i]
+						];
+
+						qrc.beginPath();
+						qrc.roundRect(px*(offset+i),px*(offset+j),px,px, [
+
+							(grid[0] || grid[1]) ? 0 : 8,
+							(grid[1] || grid[2]) ? 0 : 8,
+							(grid[2] || grid[3]) ? 0 : 8,
+							(grid[3] || grid[0]) ? 0 : 8
+
+						]);
+						qrc.fill();
+
+					} else {
+
+						qrc.fillRect(px*(offset+i),px*(offset+j),px,px);
+
+					}
                 }
              }
 
          }
-
-    },
-
-    //Table write qr code
-    tableWrite: function(qf, width) {
-
-        var scope = this;
-
-        //Table style
-        var collapseStyle = "border:0;border-collapse:collapse;";
-        var tdWidth = Math.round((this.size / width) - 3.5) + "px";
-        var borderWidth = width + ( ( scope.noBorder ) ? 0 : ( scope.borderSize * 2 ) );
-        var sideBorderWidth = scope.borderSize;
-        var tdStyle = "width:" + tdWidth + ";height:" + tdWidth + ";";
-
-        var colorLight = scope.colorLight;
-        var colorDark = scope.colorDark;
-
-        //Table elements
-        var table = document.createElement("table");
-        table.style.cssText = collapseStyle;
-
-        var tr = document.createElement("tr");
-        var td = document.createElement("td");
-
-        //Cloning and creating table Elements
-        var cloneTD = function() { return td.cloneNode(); };
-
-        var createTDDark = function() {
-            var elem = cloneTD();
-            elem.style.cssText = tdStyle + "background:" + colorDark;
-            return elem;
-        };
-
-        var createTDLight = function() {
-            var elem = cloneTD();
-            elem.style.cssText = tdStyle + "background:" + colorLight;
-            return elem;
-        }
-
-
-        //Regular borders appending
-        var appendBorders = function( table ) {
-
-            var insertNode = table.firstChild;
-
-            for( var i = 0; i < scope.borderSize; i ++ ) {
-
-                var row = tr.cloneNode();
-
-                for( var t = 0; t < borderWidth; t++ ) {
-                    var lightTD = createTDLight();
-                    row.appendChild(lightTD);
-                }
-
-                table.appendChild( row );
-                table.insertBefore( row.cloneNode( true ), insertNode );
-
-            }
-
-        }
-
-
-        //Create side border
-        var appendSideBorders = function( row ) {
-
-            var insertNode = row.firstChild;
-
-            for( var i = 0; i < sideBorderWidth; i ++ ) {
-
-                row.insertBefore( createTDLight(), insertNode );
-
-                row.appendChild(createTDLight());
-
-            }
-
-        };
-
-        //Write boxes per row
-        for( var i = 0; i < width; i++ ) {
-
-            var currentRow = tr.cloneNode();
-            table.appendChild(currentRow);
-
-            for( var j = 0; j < width; j++ ) {
-
-                //Is a dark color
-                if( qf[ (i*width) + j ] === 1 ) {
-                    var darkTd = createTDDark();
-                    currentRow.appendChild(darkTd);
-                }
-
-                //Light color
-                else {
-                    var lightTD = createTDLight();
-                    currentRow.appendChild(lightTD);
-                }
-
-            }
-
-            if( !scope.noBorder ) {
-
-                appendSideBorders(currentRow);
-
-            }
-
-        }
-
-        if( !scope.noBorder ) {
-
-            appendBorders( table );
-
-        }
-
-         scope.domElement.innerHTML = "";
-         scope.domElement.appendChild(table);
-
-    },
-
-    //get domElement 2D  Context
-    getContext: function(domElement) {
-
-        //try to get 2d context error
-        if(!(domElement.getContext && domElement.getContext('2d'))) {
-
-            console.log("Browser does not have 2d Canvas support");
-            return false;
-
-        }
-
-        return domElement.getContext('2d');
-
-    },
-
-    //QR frame to image type
-    toImage: function(type) {
-
-        if(!this.qrc) {return;}
-
-        //Check image output type
-        var dataType = this.imageTypes[type];
-        if(!dataType) {
-            throw new Error(type + " is not a valid image type ");
-        }
-
-        //create image with src of QR code
-    	var image = new Image;
-    	image.src = this.domElement.toDataURL(dataType);
-    	return image;
 
     }
 
@@ -922,9 +796,9 @@ VanillaQR.prototype = {
 // Private variables
 // alignment pattern
 VanillaQR.adelta = [
-  0, 11, 15, 19, 23, 27, 31, // force 1 pat
-  16, 18, 20, 22, 24, 26, 28, 20, 22, 24, 24, 26, 28, 28, 22, 24, 24,
-  26, 26, 28, 28, 24, 24, 26, 26, 26, 28, 28, 24, 26, 26, 26, 28, 28
+    0, 11, 15, 19, 23, 27, 31, // force 1 pat
+    16, 18, 20, 22, 24, 26, 28, 20, 22, 24, 24, 26, 28, 28, 22, 24, 24,
+    26, 26, 28, 28, 24, 24, 26, 26, 26, 28, 28, 24, 26, 26, 26, 28, 28
 ];
 
 // version block
